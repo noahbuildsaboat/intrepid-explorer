@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>intrepid explorer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: black;
+      color: white;
+      margin: 0;
+      overflow: hidden;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+    }
+    .button {
+      background-color: #444;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    .button:hover {
+      background-color: #888;
+    }
+    .centered {
+      text-align: center;
+      margin-top: 100px;
+    }
+    #credits, #controls, #settings {
+      display: none;
+      padding: 20px;
+      text-align: center;
+    }
+    a { color: white; }
+    /* Mobile control overlay */
+    #mobileControls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      z-index: 10;
+    }
+    #mobileControls button {
+      background-color: rgba(68,68,68,0.8);
+      border: none;
+      color: white;
+      font-size: 24px;
+      margin: 5px;
+      padding: 15px;
+      border-radius: 50%;
+    }
+    #mobileControls .row {
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="startScreen" class="centered">
+    <h1>intrepid explorer</h1>
+    <button id="playButton" class="button">play</button>
+    <button id="controlsButton" class="button">controls</button>
+    <button id="creditsButton" class="button">credits</button>
+    <button id="settingsButton" class="button">settings</button>
+  </div>
+  
+  <div id="controls" class="centered">
+    <h2>controls:</h2>
+    <p>w: accelerate</p>
+    <p>a: rotate left</p>
+    <p>s: decelerate</p>
+    <p>d: rotate right</p>
+    <p>h: pause/homescreen</p>
+    <button id="backFromControlsButton" class="button">back</button>
+  </div>
+
+  <div id="credits" class="centered">
+    <h2>credits:</h2>
+    <p>made using html and javascript.</p>
+    <p>creator: noah brooks</p>
+    <p>
+      i made this game out of boredom. with a little bit of ai to help with smoothing movement and my brother-in-law to help me learn from scratch, 
+      i made this game in a good 5 days. thanks for playing. if you wanna stalk me: 
+      <a href="https://x.com/khonssss" target="_blank">https://x.com/khonssss</a>
+    </p>
+    <button id="backFromCreditsButton" class="button">back</button>
+  </div>
+
+  <div id="settings" class="centered">
+    <h2>settings:</h2>
+    <label>
+      <input type="checkbox" id="mobileModeToggle">
+      mobile mode
+    </label>
+    <p>when turned on, makes arrow keys appear at the bottom of screen for mobile players to play.</p>
+    <button id="backFromSettingsButton" class="button">back</button>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- mobile controls overlay! -->
+  <div id="mobileControls">
+    <div class="row">
+      <button id="upButton">&#8593;</button>
+    </div>
+    <div class="row">
+      <button id="leftButton">&#8592;</button>
+      <button id="downButton">&#8595;</button>
+      <button id="rightButton">&#8594;</button>
+    </div>
+    <div class="row">
+      <button id="pauseButton">h</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const WIDTH = window.innerWidth;
+    const HEIGHT = window.innerHeight;
+    canvas.width = WIDTH;
+    canvas.height = HEIGHT;
+
+    let gameStarted = false;
+    let mobileMode = false;
+    let ship = {
+      x: WIDTH / 2,
+      y: HEIGHT / 2,
+      angle: 0,
+      speed: 0,
+      maxSpeed: 250,
+      acceleration: 45,
+      deceleration: 20,
+      rotationSpeed: 0.3,
+      size: 20,
+      lives: 5
+    };
+
+    let rocks = [];
+    let pellets = [];
+    let score = 0;
+    let lastTime = 0;
+
+    function drawShip() {
+      ctx.save();
+      ctx.translate(ship.x, ship.y);
+      ctx.rotate(ship.angle);
+      ctx.beginPath();
+      ctx.moveTo(ship.size, 0);
+      ctx.lineTo(-ship.size / 2, ship.size / 2);
+      ctx.lineTo(-ship.size / 2, -ship.size / 2);
+      ctx.closePath();
+      ctx.fillStyle = "white";
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function moveShip(dt) {
+      ship.x += Math.cos(ship.angle) * ship.speed * dt;
+      ship.y += Math.sin(ship.angle) * ship.speed * dt;
+      if (ship.x > WIDTH) ship.x = 0;
+      if (ship.x < 0) ship.x = WIDTH;
+      if (ship.y > HEIGHT) ship.y = 0;
+      if (ship.y < 0) ship.y = HEIGHT;
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'arrowleft' || e.key === 'a') {
+        ship.angle -= ship.rotationSpeed;
+      } else if (e.key === 'arrowright' || e.key === 'd') {
+        ship.angle += ship.rotationSpeed;
+      } else if (e.key === 'arrowdown' || e.key === 's') {
+        ship.speed = Math.max(0, ship.speed - ship.deceleration);
+      } else if (e.key === 'arrowup' || e.key === 'w') {
+        ship.speed = Math.min(ship.maxSpeed, ship.speed + ship.acceleration);
+      } else if (e.key === ' ') {
+        shootPellet();
+      }
+    }
+
+    function shootPellet() {
+      const pellet = {
+        x: ship.x + Math.cos(ship.angle) * ship.size,
+        y: ship.y + Math.sin(ship.angle) * ship.size,
+        angle: ship.angle,
+        speed: 8
+      };
+      pellets.push(pellet);
+    }
+
+    function drawPellets() {
+      ctx.fillStyle = 'white';
+      for (let i = 0; i < pellets.length; i++) {
+        const pellet = pellets[i];
+        pellet.x += Math.cos(pellet.angle) * pellet.speed;
+        pellet.y += Math.sin(pellet.angle) * pellet.speed;
+        ctx.beginPath();
+        ctx.arc(pellet.x, pellet.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        if (pellet.x < 0 || pellet.x > WIDTH || pellet.y < 0 || pellet.y > HEIGHT) {
+          pellets.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    function createRock() {
+      const size = Math.random() * 20 + 20;
+      const rock = {
+        x: Math.random() * WIDTH,
+        y: Math.random() * HEIGHT,
+        radius: size,
+        speed: Math.random() * 1 + 0.5,
+        angle: Math.random() * Math.PI * 2
+      };
+      rocks.push(rock);
+    }
+
+    function drawRocks() {
+      ctx.fillStyle = 'gray';
+      for (let i = 0; i < rocks.length; i++) {
+        const rock = rocks[i];
+        ctx.beginPath();
+        ctx.arc(rock.x, rock.y, rock.radius, 0, 2 * Math.PI);
+        ctx.fill();
+        rock.x += Math.cos(rock.angle) * rock.speed;
+        rock.y += Math.sin(rock.angle) * rock.speed;
+        if (rock.x > WIDTH) rock.x = 0;
+        if (rock.x < 0) rock.x = WIDTH;
+        if (rock.y > HEIGHT) rock.y = 0;
+        if (rock.y < 0) rock.y = HEIGHT;
+      }
+    }
+
+    function checkCollisions() {
+      for (let i = 0; i < rocks.length; i++) {
+        const rock = rocks[i];
+        const dx = ship.x - rock.x;
+        const dy = ship.y - rock.y;
+        if (Math.sqrt(dx * dx + dy * dy) < ship.size + rock.radius) {
+          ship.lives--;
+          rocks.splice(i, 1);
+          if (ship.lives <= 0) {
+            alert('game over! score: ' + score);
+            resetGame();
+            return;
+          }
+        }
+        for (let j = 0; j < pellets.length; j++) {
+          const pellet = pellets[j];
+          const dxp = pellet.x - rock.x;
+          const dyp = pellet.y - rock.y;
+          if (Math.sqrt(dxp * dxp + dyp * dyp) < rock.radius + 3) {
+            score += Math.floor(rock.radius / 10);
+            rocks.splice(i, 1);
+            pellets.splice(j, 1);
+            i--;
+            j--;
+            break;
+          }
+        }
+      }
+    }
+
+    function resetGame() {
+      ship.x = WIDTH / 2;
+      ship.y = HEIGHT / 2;
+      ship.angle = 0;
+      ship.speed = 0;
+      ship.lives = 5;
+      score = 0;
+      rocks = [];
+      pellets = [];
+    }
+
+    function update(timestamp) {
+      if (!gameStarted) return;
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+      moveShip(dt);
+      drawShip();
+      drawPellets();
+      drawRocks();
+      checkCollisions();
+      ctx.font = '20px Arial';
+      ctx.fillStyle = 'white';
+      ctx.fillText('score: ' + score, 20, 30);
+      ctx.fillText('lives: ' + ship.lives, 20, 60);
+      if (Math.random() < 0.01) {
+        createRock();
+      }
+      requestAnimationFrame(update);
+    }
+
+    function showStartScreen() {
+      gameStarted = false;
+      document.getElementById('startScreen').style.display = 'block';
+      document.getElementById('credits').style.display = 'none';
+      document.getElementById('controls').style.display = 'none';
+      document.getElementById('settings').style.display = 'none';
+      canvas.style.display = 'none';
+      document.getElementById('mobileControls').style.display = 'none';
+    }
+
+    function showCredits() {
+      gameStarted = false;
+      document.getElementById('startScreen').style.display = 'none';
+      document.getElementById('credits').style.display = 'block';
+      document.getElementById('controls').style.display = 'none';
+      document.getElementById('settings').style.display = 'none';
+      canvas.style.display = 'none';
+      document.getElementById('mobileControls').style.display = 'none';
+    }
+    
+    function showControls() {
+      gameStarted = false;
+      document.getElementById('startScreen').style.display = 'none';
+      document.getElementById('controls').style.display = 'block';
+      document.getElementById('credits').style.display = 'none';
+      document.getElementById('settings').style.display = 'none';
+      canvas.style.display = 'none';
+      document.getElementById('mobileControls').style.display = 'none';
+    }
+    
+    function showSettings() {
+      gameStarted = false;
+      document.getElementById('startScreen').style.display = 'none';
+      document.getElementById('settings').style.display = 'block';
+      document.getElementById('credits').style.display = 'none';
+      document.getElementById('controls').style.display = 'none';
+      canvas.style.display = 'none';
+      document.getElementById('mobileControls').style.display = 'none';
+    }
+
+    document.getElementById('playButton').addEventListener('click', () => {
+      gameStarted = true;
+      document.getElementById('startScreen').style.display = 'none';
+      document.getElementById('credits').style.display = 'none';
+      document.getElementById('controls').style.display = 'none';
+      document.getElementById('settings').style.display = 'none';
+      canvas.style.display = 'block';
+      lastTime = performance.now();
+      update(lastTime);
+      if (mobileMode) {
+        document.getElementById('mobileControls').style.display = 'block';
+      }
+    });
+
+    document.getElementById('creditsButton').addEventListener('click', showCredits);
+    document.getElementById('controlsButton').addEventListener('click', showControls);
+    document.getElementById('settingsButton').addEventListener('click', showSettings);
+    document.getElementById('backFromCreditsButton').addEventListener('click', showStartScreen);
+    document.getElementById('backFromControlsButton').addEventListener('click', showStartScreen);
+    document.getElementById('backFromSettingsButton').addEventListener('click', showStartScreen);
+
+    document.getElementById('mobileModeToggle').addEventListener('change', (e) => {
+      mobileMode = e.target.checked;
+    });
+
+    // mobile controls event listeners
+    document.getElementById('upButton').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      ship.speed = Math.min(ship.maxSpeed, ship.speed + ship.acceleration);
+    });
+    document.getElementById('leftButton').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      ship.angle -= ship.rotationSpeed;
+    });
+    document.getElementById('downButton').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      ship.speed = Math.max(0, ship.speed - ship.deceleration);
+    });
+    document.getElementById('rightButton').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      ship.angle += ship.rotationSpeed;
+    });
+    document.getElementById('pauseButton').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      showStartScreen();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'h') {
+        showStartScreen();
+      } else if (gameStarted) {
+        handleKeyPress({ key: e.key.toLowerCase() });
+      }
+    });
+
+    showStartScreen();
+  </script>
+</body>
+</html>
