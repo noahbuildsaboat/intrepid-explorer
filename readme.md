@@ -12,4 +12,4 @@ btw here are some images
 ![intrepidPNG2](https://github.com/user-attachments/assets/3475b335-49d2-4bda-96e9-33d80bb5ec9a)
 ![intrepidPNG3](https://github.com/user-attachments/assets/2f177795-e7d4-462b-9752-20bbd1835adf)
 
-©2025 noahbuildsaboat / khons
+©2025 noahbuildsaboat
